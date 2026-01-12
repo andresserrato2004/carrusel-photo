@@ -90,7 +90,7 @@ export async function getCarouselImages(): Promise<CarouselImage[]> {
       })
     );
     
-    // Filtrar solo las que tienen datos encontrados
+    // Filtro estricto solicitado: Solo devolver imágenes que tienen coincidencia en la base de datos
     return imagesWithMetadata.filter(img => img.studentName !== "");
 
   } catch (error) {

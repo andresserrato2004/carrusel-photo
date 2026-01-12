@@ -48,11 +48,23 @@ export default function Carousel({ initialImages }: CarouselProps) {
   }
 
   const currentImage = images[currentIndex];
+  
+  // PRELOAD LOGIC: Calculate next 2 images to load in background
+  const nextIndex = (currentIndex + 1) % images.length;
+  const nextNextIndex = (currentIndex + 2) % images.length;
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-gradient-to-br from-[#660000] to-[#330000]">
-      {/* Background Pattern or Texture */}
-      
+      {/* Hidden Preloader: Forces browser to download next images into cache */}
+      <div className="hidden display-none opacity-0 pointer-events-none absolute">
+        {images.length > 1 && (
+            <>
+                <img src={images[nextIndex].url} alt="preload-1" loading="eager" />
+                <img src={images[nextNextIndex].url} alt="preload-2" loading="eager" />
+            </>
+        )}
+      </div>
+
       {/* Top Left Logo - Bigger */}
       <img 
         src="/logoescuela.png" 
