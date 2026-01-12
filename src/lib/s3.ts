@@ -21,9 +21,6 @@ export interface CarouselImage {
 export async function getCarouselImages(): Promise<CarouselImage[]> {
   const bucketName = process.env.S3_BUCKET_NAME;
 
-  console.log("=== getCarouselImages called ===");
-  console.log("S3_BUCKET_NAME:", bucketName);
-
   if (!bucketName) {
     console.error("S3_BUCKET_NAME is not defined");
     return [];
@@ -34,15 +31,42 @@ export async function getCarouselImages(): Promise<CarouselImage[]> {
       Bucket: bucketName,
     });
 
-    console.log("Fetching from S3...");
     const response = await s3Client.send(command);
     const contents = response.Contents || [];
-    console.log("S3 files found:", contents.length);
 
-    // Filter images and sort by newest first
     const imageFiles = contents
       .filter((item) => item.Key && /\.(jpg|jpeg|png)$/i.test(item.Key))
       .sort((a, b) => (b.LastModified?.getTime() || 0) - (a.LastModified?.getTime() || 0));
+
+    // OPTIMIZACIÓN CRÍTICA:
+    // En lugar de hacer N consultas a la base de datos (una por cada imagen),
+    // haremos UNA sola consulta para traer todos los usuarios que coincidan.
+    
+    // 1. Extraemos todos los nombres de archivo
+    const fileNames = imageFiles.map(file => file.Key!.split('/').pop() || "");
+
+    // 2. Buscamos en la BD todos los usuarios cuyas imágenes estén en esa lista
+    let users: any[] = [];
+    try {
+        users = await prisma.user.findMany({
+          where: {
+            image: {
+              in: fileNames
+            }
+          }
+        });
+    } catch (dbError) {
+        console.error("Database connection failed (Prisma):", dbError);
+        // Fallback: Proceed with empty users array so we at least show images
+    }
+
+    // 3. Creamos un mapa rápido para buscar usuario por nombre de imagen
+    const userMap = new Map();
+    users.forEach(user => {
+      if (user.image) {
+        userMap.set(user.image, user);
+      }
+    });
 
     const imagesWithMetadata = await Promise.all(
       imageFiles.map(async (file) => {
@@ -51,46 +75,24 @@ export async function getCarouselImages(): Promise<CarouselImage[]> {
           Key: file.Key,
         });
 
-        // Generate signed URL for display
         const url = await getSignedUrl(s3Client, getObjectCommand, { expiresIn: 3600 });
-        
-        // Clean filename to match DB 'image' column (removes folder paths if any)
         const fileName = file.Key!.split('/').pop() || ""; 
         
-        let studentName = "";
-        let studentCareer = "";
-
-        try {
-            // STRICT MATCH: Look for user where 'image' column equals the S3 filename
-            const user = await prisma.user.findFirst({
-                where: {
-                    image: fileName
-                }
-            });
-
-            if (user) {
-                studentName = user.name || "";
-                studentCareer = user.career || "";
-            } 
-
-        } catch (dbError) {
-             console.error(`Database error for file ${fileName}:`, dbError);
-        }
+        const user = userMap.get(fileName);
 
         return {
           key: file.Key!,
           url,
           lastModified: file.LastModified!,
-          studentName,
-          studentCareer,
+          studentName: user ? (user.name || "") : "",
+          studentCareer: user ? (user.career || "") : "",
         };
       })
     );
-
-    // Solo devolver imágenes que tienen coincidencia en la base de datos
-    const filteredImages = imagesWithMetadata.filter(img => img.studentName !== "");
     
-    return filteredImages;
+    // Filtrar solo las que tienen datos encontrados
+    return imagesWithMetadata.filter(img => img.studentName !== "");
+
   } catch (error) {
     console.error("Error fetching images from S3:", error);
     return [];
