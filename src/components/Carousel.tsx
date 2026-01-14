@@ -74,7 +74,7 @@ export default function Carousel({ initialImages }: CarouselProps) {
 
       {/* Top Right Title */}
       <h1 className="absolute top-124 left-24 text-6xl font-serif font-bold text-[#D4AF37] tracking-widest z-20">
-        <p>GRADUADOS</p> <p> 2026-1</p>
+        <p>GRADUADOS</p> <p> 2030-1</p>
       </h1>
 
       <AnimatePresence mode="wait">
